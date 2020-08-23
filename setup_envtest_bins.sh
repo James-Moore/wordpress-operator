@@ -174,11 +174,11 @@ getK8S() {
 #Drives test environment setup
 setup_testenv_bin() {
   # Do nothing if the $TESTBIN_DIR directory exist already.
-  if [ ! -d $TESTBIN_DIR ]; then
+  #if [ ! -d $TESTBIN_DIR ]; then
     mkdir -p $TESTBIN_DIR
     getETCD
     getK8S 
-  fi
+  #fi
 
   #Export Test Environment Variables
   export PATH=/$TESTBIN_DIR:$PATH

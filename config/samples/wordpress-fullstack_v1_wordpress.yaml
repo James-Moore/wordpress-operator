@@ -1,0 +1,8 @@
+apiVersion: wordpress-fullstack.jamesmoore.in/v1
+kind: Wordpress
+metadata:
+  name: wordpress-moorej10
+spec:
+  # Add fields here
+  deployment_name: wordpress-moorej10
+  password: password_val
