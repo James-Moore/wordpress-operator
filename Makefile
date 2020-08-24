@@ -138,7 +138,7 @@ mybuild: mydev docker-build docker-push
 	@echo "Build Done"
 
 .PHONY: mystart
-	mystart: deploy
+mystart: deploy
 	kubectl apply -f ./config/samples/cache_v1_memcached.yaml
 	@echo "Start Done"
 	#kubectl logs memcached-operator-controller-manager-7c8ddcb78c-9vfpq manager
@@ -149,7 +149,7 @@ mystop:
 	@kustomize build config/default | kubectl delete --ignore-not-found -f -
 
 .PHONY: myclean
-	myclean: mystop
+myclean: mystop
 	@dockerlist=$$(docker images -a | grep -E 'none|memcached' | awk '{print $$3}'); \
 	for i in $${dockerlist} ; do  \
 		docker rmi -f $${i} ; \

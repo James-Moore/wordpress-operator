@@ -27,3 +27,4 @@ testbin/etcdctl
 testbin/kube-apiserver
 testbin/kubectl
 
+/ignoredir/
