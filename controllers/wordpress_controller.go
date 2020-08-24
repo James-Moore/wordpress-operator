@@ -24,6 +24,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"strconv"
+
 	//"reflect"
 
 	wordpressfullstackv1 "github.com/James-Moore/wordpress-operator/api/v1"
@@ -90,12 +92,12 @@ func (r *WordpressReconciler) ReconcilePods(ctx context.Context, wordpress *word
 	podNames := getPodNames(podList.Items)
 	switch os := len(podNames); os {
 	case 0:
-		err := errors2.New("Wordpress Pod Reconciliation Error")
+		err := errors2.New("wordpress pod reconciliation error")
 		r.Log.Error(err, "WordpressContainer and MySQLContainer do not exist in deployment.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
 		return err
 	case 1:
 		if _, ok := podNames[WordpressImageName]; !ok {
-			err := errors2.New("Wordpress Pod Reconciliation Error")
+			err := errors2.New("wordpress pod reconciliation error")
 			r.Log.Error(err, "WordpressContainer exists without MySQLContainer.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
 			return err
 		}
@@ -103,8 +105,9 @@ func (r *WordpressReconciler) ReconcilePods(ctx context.Context, wordpress *word
 		// This becasue the mysqlpod is up and running
 	default:
 		if os > 2 {
-			err := errors2.New("Wordpress Pod Reconciliation Error")
-			r.Log.Error(err, "There are additional pods that shoudl not exist in the Wordpress Deployment.  Number of pods are: "+string(os)+".This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+			err := errors2.New("wordpress pod reconciliation error")
+			num := strconv.Itoa(os)
+			r.Log.Error(err, "There are additional pods that shoudl not exist in the Wordpress Deployment.  Number of pods are: "+num+".This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
 			return err
 		}
 	}
