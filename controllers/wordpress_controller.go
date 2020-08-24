@@ -16,6 +16,7 @@ package controllers
 
 import (
 	"context"
+	errors2 "errors"
 	"github.com/go-logr/logr"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -24,95 +25,51 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	//"reflect"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	wordpressfullstackv1 "github.com/James-Moore/wordpress-operator/api/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+)
+
+const (
+	WordpressAppName       = "wordpress"
+	WordpressContainerName = "wordpress"
+	WordpressImageName     = "wordpress"
+	MySQLContainerName     = "mysql"
+	MySQLImageName         = "mysql"
 )
 
 func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
+	namespaceName := req.NamespacedName
+	log := r.Log.WithValues("wordpress", namespaceName)
 	ctx := context.Background()
-	log := r.Log.WithValues("wordpress", req.NamespacedName)
+	wordpress := &wordpressfullstackv1.Wordpress{}
+	deployment := &appsv1.Deployment{}
+	podList := &corev1.PodList{}
 
 	log.Info("CHECKPOINT 1")
-	// Fetch the Wordpress instance
-	wordpress := &wordpressfullstackv1.Wordpress{}
-	err := r.Get(ctx, req.NamespacedName, wordpress)
+	err := r.ReconcileCustomResource(ctx, wordpress, namespaceName)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			log.Info("Wordpress resource not found. Ignoring since object must be deleted")
-			return ctrl.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
-		log.Error(err, "Failed to get Wordpress")
 		return ctrl.Result{}, err
 	}
 
 	log.Info("CHECKPOINT 2")
-	// Check if the deployment already exists, if not create a new one
-	found := &appsv1.Deployment{}
-	err = r.Get(ctx, types.NamespacedName{Name: wordpress.Name, Namespace: wordpress.Namespace}, found)
-	if err != nil && errors.IsNotFound(err) {
-		cntrs := r.createContainers(wordpress)
-		// Define a new deployment
-		dep := r.createDeployment(wordpress, cntrs)
-
-		log.Info("Creating a new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-		err = r.Create(ctx, dep)
-		if err != nil {
-			log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", dep.Namespace, "Deployment.Name", dep.Name)
-			return ctrl.Result{}, err
-		}
-		// Deployment created successfully - return and requeue
-		return ctrl.Result{Requeue: true}, nil
-	} else if err != nil {
-		log.Error(err, "Failed to get Deployment")
+	err = r.ReconcileDeployment(ctx, wordpress, deployment)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	log.Info("CHECKPOINT 3")
-	//JAMES TODO I BELIEVE THIS IS WHERE WE BUILD OUT THE DEPLOYMENT INCREMENTALLY.  STEP 1 CHECK FOR VOLUME IF NOT THERE DEPLOY.  STEP 2 CHECK FOR MYSQL IF NOT HERE CREATE.  STEP 3 SAME FOR WORDPRESS. STEP 4 SAME FOR SERVICE
-	println(found.Spec.Template.Spec.Containers)
-	// Ensure the deployment size is the same as the spec
-	//size := wordpress.Spec.Size
-	//if *found.Spec.Replicas != size {
-	//	found.Spec.Replicas = &size
-	//	//println(found.Spec.Template.Spec.Containers[0])
-	//	err = r.Update(ctx, found)
-	//	if err != nil {
-	//		log.Error(err, "Failed to update Deployment", "Deployment.Namespace", found.Namespace, "Deployment.Name", found.Name)
-	//		return ctrl.Result{}, err
-	//	}
-	//	// Spec updated - return and requeue
-	//	return ctrl.Result{Requeue: true}, nil
-	//}
 
 	// Update the Wordpress status with the pod names
-	log.Info("CHECKPOINT 4")
-
-	// Define the values to match Pods against
-	podList := &corev1.PodList{}
-	listOpts := []client.ListOption{
-		client.InNamespace(wordpress.Namespace),
-		client.MatchingLabels(labelsForWordpress(wordpress.Name)),
-	}
-
-	// Get the list of pods matching our search parameters: Namespace and Labels
-	log.Info("CHECKPOINT 5")
-	if err = r.List(ctx, podList, listOpts...); err != nil {
-		log.Error(err, "Failed to list pods", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+	log.Info("CHECKPOINT 3")
+	err = r.getPodList(ctx, wordpress, podList)
+	if err != nil {
 		return ctrl.Result{}, err
 	}
 
-	log.Info("CHECKPOINT 6")
-	// Get the names of the pods from our list
-	podNames := getPodNames(podList.Items)
-
-	for _, podName := range podNames {
-		log.Info(podName)
+	log.Info("CHECKPOINT 4")
+	err = r.ReconcilePods(ctx, wordpress, podList)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Update status.Nodes if needed
@@ -125,21 +82,164 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	//	}
 	//}
 
-	log.Info("CHECKPOINT 7")
-	log.Info("CHECKPOINT 8")
+	log.Info("CHECKPOINT 5")
 	return ctrl.Result{}, nil
 }
 
-func (r *WordpressReconciler) createContainers(m *wordpressfullstackv1.Wordpress) []corev1.Container {
-	mysqlContainer := r.createMySqlContainer(m)
-	wordpressContainer := r.createWordpressContainer(m)
-	return []corev1.Container{mysqlContainer, wordpressContainer}
+func (r *WordpressReconciler) ReconcilePods(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, podList *corev1.PodList) error {
+	podNames := getPodNames(podList.Items)
+	switch os := len(podNames); os {
+	case 0:
+		err := errors2.New("Wordpress Pod Reconciliation Error")
+		r.Log.Error(err, "WordpressContainer and MySQLContainer do not exist in deployment.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+		return err
+	case 1:
+		if _, ok := podNames[WordpressImageName]; !ok {
+			err := errors2.New("Wordpress Pod Reconciliation Error")
+			r.Log.Error(err, "WordpressContainer exists without MySQLContainer.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+			return err
+		}
+		// TODO Update Deployment Definition here to include the wordpress container in the Pod.
+		// This becasue the mysqlpod is up and running
+	default:
+		if os > 2 {
+			err := errors2.New("Wordpress Pod Reconciliation Error")
+			r.Log.Error(err, "There are additional pods that shoudl not exist in the Wordpress Deployment.  Number of pods are: "+string(os)+".This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+			return err
+		}
+	}
+
+	//Development statement:  Printing all pod names
+	for podName := range podNames {
+		r.Log.Info(podName)
+	}
+
+	//Everything went fine.
+	return nil
 }
 
-func (r *WordpressReconciler) createWordpressContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
+// getPodNames returns the pod names of the array of pods passed in
+func getPodNames(pods []corev1.Pod) map[string]bool {
+	podNames := make(map[string]bool) // New empty set
+	//delete(podNames, "Foo")    // Delete
+	//exists := podNames["Foo"]  // Membership
+
+	for _, pod := range pods {
+		podNames[pod.Name] = true // Add
+	}
+	return podNames
+}
+
+func (r *WordpressReconciler) getPodList(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, podList *corev1.PodList) error {
+	// Define the values to match Pods against
+	listOpts := []client.ListOption{
+		client.InNamespace(wordpress.Namespace),
+		client.MatchingLabels(labelsForDeployment(wordpress.Name)),
+	}
+
+	// Get the list of pods matching our search parameters: Namespace and Labels
+	err := r.List(ctx, podList, listOpts...)
+	if err != nil {
+		r.Log.Error(err, "Failed to list pods", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
+		return err
+	}
+
+	return nil
+}
+
+func (r *WordpressReconciler) ReconcileCustomResource(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, namespaceName types.NamespacedName) error {
+	// Fetch the Wordpress instance
+	err := r.Get(ctx, namespaceName, wordpress)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			// Request object not found, could have been deleted after reconcile request.
+			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
+			// Return and don't requeue
+			r.Log.Info("Wordpress resource not found. Ignoring since object must be deleted")
+			return nil
+		}
+		// Error reading the object - requeue the request.
+		r.Log.Error(err, "Failed to get Wordpress")
+		return err
+	}
+
+	return nil
+}
+
+func (r *WordpressReconciler) ReconcileDeployment(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, deployment *appsv1.Deployment) error {
+	// Check if the deployment already exists, if not create a new one
+	err := r.Get(ctx, types.NamespacedName{Name: wordpress.Name, Namespace: wordpress.Namespace}, deployment)
+
+	//If
+	if err != nil && errors.IsNotFound(err) {
+		// Create the containers
+		r.Log.Info("Creating a new Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+
+		// Define a initial container in deployment.  We start with MySql
+		containers := []corev1.Container{r.defineMySqlContainer(wordpress), r.defineWordpressContainer(wordpress)}
+
+		// Define the deployment
+		deployment := r.defineDeployment(wordpress, containers)
+
+		// Set Wordpress instance as the owner and controller
+		ctrl.SetControllerReference(wordpress, deployment, r.Scheme)
+
+		err = r.Create(ctx, deployment)
+
+		if err != nil {
+			r.Log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+			return err
+		}
+
+		// Deployment created successfully - return and requeue
+		return nil
+
+	} else if err != nil {
+		r.Log.Error(err, "Failed to get Deployment")
+		return err
+	}
+
+	return nil
+}
+
+// deploymentForWordpress returns a wordpress Deployment object
+func (r *WordpressReconciler) defineDeployment(w *wordpressfullstackv1.Wordpress, containers []corev1.Container) *appsv1.Deployment {
+	ls := labelsForDeployment(w.Name)
+
+	dep := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      w.Name,
+			Namespace: w.Namespace,
+		},
+		Spec: appsv1.DeploymentSpec{
+			//Replicas: replicas,
+			Selector: &metav1.LabelSelector{
+				MatchLabels: ls,
+			},
+			Template: corev1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: ls,
+				},
+				Spec: corev1.PodSpec{
+					Containers: containers,
+				},
+			},
+		},
+	}
+
+	return dep
+}
+
+// deploymentForWordpress returns a wordpress Deployment object
+func updateDeploymentDefinition(deployment *appsv1.Deployment, container corev1.Container) {
+	containers := deployment.Spec.Template.Spec.Containers
+	deployment.Spec.Template.Spec.Containers = append(containers, container)
+}
+
+func (r *WordpressReconciler) defineWordpressContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
 	wordpressContainer := corev1.Container{
-		Name:  "wordpress",
-		Image: "wordpress",
+		Name:  WordpressContainerName,
+		Image: WordpressImageName,
 		Env: []corev1.EnvVar{
 			{
 				Name:  "WORDPRESS_DB_HOST",
@@ -166,10 +266,11 @@ func (r *WordpressReconciler) createWordpressContainer(m *wordpressfullstackv1.W
 	return wordpressContainer
 }
 
-func (r *WordpressReconciler) createMySqlContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
+func (r *WordpressReconciler) defineMySqlContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
+
 	mysqlContainer := corev1.Container{
-		Name:  "mysql",
-		Image: "mysql",
+		Name:  MySQLContainerName,
+		Image: MySQLImageName,
 		Ports: []corev1.ContainerPort{{
 			Name:          "mysql",
 			ContainerPort: 3306,
@@ -186,166 +287,10 @@ func (r *WordpressReconciler) createMySqlContainer(m *wordpressfullstackv1.Wordp
 	return mysqlContainer
 }
 
-// deploymentForWordpress returns a wordpress Deployment object
-func (r *WordpressReconciler) createDeployment(m *wordpressfullstackv1.Wordpress, containers []corev1.Container) *appsv1.Deployment {
-	ls := labelsForDeployment(m.Name)
-
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
-			Namespace: m.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			//Replicas: replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
-				},
-				Spec: corev1.PodSpec{
-					Containers: containers,
-				},
-			},
-		},
-	}
-
-	// Set Wordpress instance as the owner and controller
-	ctrl.SetControllerReference(m, dep, r.Scheme)
-	return dep
-}
-
-// deploymentForWordpress returns a wordpress Deployment object
-func (r *WordpressReconciler) deploymentForWordpress(m *wordpressfullstackv1.Wordpress) *appsv1.Deployment {
-	ls := labelsForWordpress(m.Name)
-
-	wordpressContainer := corev1.Container{
-		Name:  "wordpress",
-		Image: "wordpress",
-		Env: []corev1.EnvVar{
-			{
-				Name:  "WORDPRESS_DB_HOST",
-				Value: "localhost:33060",
-			},
-			{
-				Name:  "WORDPRESS_DB_USER",
-				Value: "root",
-			},
-			{
-				Name:  "WORDPRESS_DB_PASSWORD",
-				Value: "Password1234",
-			},
-			{
-				Name:  "WORDPRESS_DB_NAME",
-				Value: "wordpress",
-			},
-			{
-				Name:  "WORDPRESS_TABLE_PREFIX",
-				Value: "wp_",
-			},
-		},
-	}
-
-	containers := []corev1.Container{wordpressContainer}
-
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
-			Namespace: m.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			//Replicas: replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
-				},
-				Spec: corev1.PodSpec{
-					Containers: containers,
-				},
-			},
-		},
-	}
-	// Set Wordpress instance as the owner and controller
-	ctrl.SetControllerReference(m, dep, r.Scheme)
-	return dep
-}
-
-// deploymentForWordpress returns a wordpress Deployment object
-func (r *WordpressReconciler) deploymentForMysql(m *wordpressfullstackv1.Wordpress) *appsv1.Deployment {
-	ls := labelsForMysql(m.Name)
-
-	mysqlContainer := corev1.Container{
-		Name:  "mysql",
-		Image: "mysql",
-		Ports: []corev1.ContainerPort{{
-			Name:          "mysql",
-			ContainerPort: 3306,
-			Protocol:      "TCP",
-			HostIP:        "127.0.0.1",
-			HostPort:      3306,
-		}},
-		Env: []corev1.EnvVar{{
-			Name:  "MYSQL_ROOT_PASSWORD",
-			Value: "Password1234",
-		}},
-	}
-	containers := []corev1.Container{mysqlContainer}
-
-	dep := &appsv1.Deployment{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      m.Name,
-			Namespace: m.Namespace,
-		},
-		Spec: appsv1.DeploymentSpec{
-			//Replicas: replicas,
-			Selector: &metav1.LabelSelector{
-				MatchLabels: ls,
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: ls,
-				},
-				Spec: corev1.PodSpec{
-					Containers: containers,
-				},
-			},
-		},
-	}
-
-	// Set Wordpress instance as the owner and controller
-	ctrl.SetControllerReference(m, dep, r.Scheme)
-	return dep
-}
-
 // labelsForWordpress returns the labels for selecting the resources
 // belonging to the given wordpress CR name.
 func labelsForDeployment(name string) map[string]string {
-	return map[string]string{"app": "wordpress", "wordpress_cr": name}
-}
-
-// labelsForWordpress returns the labels for selecting the resources
-// belonging to the given wordpress CR name.
-func labelsForWordpress(name string) map[string]string {
-	return map[string]string{"app": "wordpress", "wordpress_cr": name, "tier": "server"}
-}
-
-// labelsForWordpress returns the labels for selecting the resources
-// belonging to the given wordpress CR name.
-func labelsForMysql(name string) map[string]string {
-	return map[string]string{"app": "wordpress", "wordpress_cr": name, "tier": "database"}
-}
-
-// getPodNames returns the pod names of the array of pods passed in
-func getPodNames(pods []corev1.Pod) []string {
-	var podNames []string
-	for _, pod := range pods {
-		podNames = append(podNames, pod.Name)
-	}
-	return podNames
+	return map[string]string{"app": WordpressAppName, "wordpress_cr": name}
 }
 
 func (r *WordpressReconciler) SetupWithManager(mgr ctrl.Manager) error {
@@ -363,6 +308,8 @@ func (r *WordpressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 // WordpressReconciler reconciles a Wordpress object
 type WordpressReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log           logr.Logger
+	Scheme        *runtime.Scheme
+	WordpressName string
+	MysqlName     string
 }
