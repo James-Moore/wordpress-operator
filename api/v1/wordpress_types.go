@@ -29,18 +29,17 @@ type WordpressSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of Wordpress. Edit Wordpress_types.go to remove/update
-	DeploymentName string `json:"deployment_name"`
-	Password       string `json:"password"`
+	Password string `json:"password"`
 }
 
 // WordpressStatus defines the observed state of Wordpress
 type WordpressStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	WordpressService string `json:"wordpress_service"`
-	Wordpress        string `json:"wordpress"`
-	MySql            string `json:"my_sql"`
-	MySqlVolume      string `json:"my_sql_volume"`
+	WordpressServiceUID string `json:"wordpress_service"`
+	WordpressUID        string `json:"wordpress"`
+	MySqlUID            string `json:"my_sql"`
+	MySqlVolumeUID      string `json:"my_sql_volume"`
 }
 
 // +kubebuilder:object:root=true
