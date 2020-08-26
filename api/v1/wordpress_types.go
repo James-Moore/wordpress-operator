@@ -36,10 +36,20 @@ type WordpressSpec struct {
 type WordpressStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
-	WordpressServiceUID string `json:"wordpress_service"`
-	WordpressUID        string `json:"wordpress"`
-	MySqlUID            string `json:"my_sql"`
-	MySqlVolumeUID      string `json:"my_sql_volume"`
+	WordpressServiceUUID string `json:"wordpress_service_uuid"`
+
+	WordpressDeploymentUUID      string `json:"wordpress_deployment_uuid"`
+	WordpressDeploymentName      string `json:"wordpress_deployment_name"`
+	WordpressDeploymentNamespace string `json:"wordpress_deployment_namespace"`
+
+	WordpressPodUID       string `json:"wordpress_pod_uid"`
+	WordpressPodNamespace string `json:"wordpress_pod_namespace"`
+	WordpressPodName      string `json:"wordpress_pod_name"`
+
+	WordpressContainerName string `json:"wordpress_container_name"`
+	MySqlContainerName     string `json:"my_sql_container_name"`
+
+	MySqlVolumeUUID string `json:"my_sql_volume_uuid"`
 }
 
 // +kubebuilder:object:root=true
