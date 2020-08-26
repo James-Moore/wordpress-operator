@@ -36,8 +36,24 @@ const (
 	WordpressAppName       = "wordpress"
 	WordpressContainerName = "wordpress"
 	WordpressImageName     = "wordpress"
-	MySQLContainerName     = "mysql"
-	MySQLImageName         = "mysql"
+
+	MySQLContainerName = "mysql"
+	MySQLImageName     = "mysql"
+
+	MySQL_MYSQLCNF_ConfigMapKey = "mysqlconfig"
+	MySQL_MYSQLCNF_ConfigVolume = "mysqlconfigvolume"
+	MySQL_MYSQLCNF_ConfigPath   = "/etc/mysql"
+	MySQL_MYSQLCNF_ConfigFile   = "mysql.cnf"
+
+	MySQL_SECURECHK_ConfigMapKey = "mysqlsecurecheck"
+	MySQL_SECURECHK_ConfigVolume = "mysqlsecurecheckvolume"
+	MySQL_SECURECHK_ConfigPath   = "/var/lib/mysql-files"
+	MySQL_SECURECHK_ConfigFile   = "blank.cnf"
+
+	MySQLPort       = "3306"
+	MySQLPort_INT32 = 3306
+
+	ServiceName = "wpservice"
 )
 
 func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
@@ -51,13 +67,13 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	podList := &corev1.PodList{}
 
 	log.Info("CHECKPOINT 1")
-	breakControl, err := r.ReconcileCustomResource(ctx, wordpress, namespaceName)
+	breakControl, err := r.reconcileCustomResource(ctx, namespaceName, wordpress)
 	if breakControl {
 		return ctrl.Result{}, err
 	}
 
 	log.Info("CHECKPOINT 2")
-	breakControl, err = r.ReconcileDeployment(ctx, wordpress, deployment)
+	breakControl, err = r.reconcileDeployment(ctx, wordpress, deployment)
 	if breakControl {
 		return ctrl.Result{}, err
 	}
@@ -70,7 +86,7 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	}
 
 	log.Info("CHECKPOINT 4")
-	breakControl, err = r.ReconcilePods(ctx, wordpress, podList)
+	breakControl, err = r.reconcilePods(ctx, wordpress, podList)
 	if breakControl {
 		return ctrl.Result{}, err
 	}
@@ -89,7 +105,32 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
-func isContainerReady(containerName string, pod corev1.Pod) bool {
+func (r *WordpressReconciler) getPodState(pod corev1.Pod) string {
+	message := "Pod: " + pod.Name
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		message = message + ", Container: " + containerStatus.Name + "State: " + containerStatus.State.String()
+	}
+	return message
+}
+
+func (r *WordpressReconciler) getPodsState(pods []corev1.Pod) string {
+	message := "Pods: "
+	for _, pod := range pods {
+		message += r.getPodState(pod)
+	}
+	return message
+}
+
+func (r *WordpressReconciler) containsContainer(containerName string, pod corev1.Pod) bool {
+	for _, cs := range pod.Status.ContainerStatuses {
+		if containerName == cs.Name {
+			return true
+		}
+	}
+	return false
+}
+
+func (r *WordpressReconciler) isContainerInPodReady(containerName string, pod corev1.Pod) bool {
 	ready := false
 	for _, cs := range pod.Status.ContainerStatuses {
 		if containerName == cs.Name {
@@ -99,41 +140,39 @@ func isContainerReady(containerName string, pod corev1.Pod) bool {
 	return ready
 }
 
-func containsContainer(containerName string, pod corev1.Pod) bool {
-	for _, cs := range pod.Status.ContainerStatuses {
-		if containerName == cs.Name {
-			return true
+//MySQLContainerName
+func (r *WordpressReconciler) isContainerInPodsReady(containerName string, podName string, pods []corev1.Pod) bool {
+	ready := false
+
+	r.Log.Info(r.getPodsState(pods))
+	for _, pod := range pods {
+		if (podName == pod.Name) && (r.containsContainer(containerName, pod)) {
+			ready = r.isContainerInPodReady(containerName, pod)
+			r.Log.Info("MySql Ready: " + strconv.FormatBool(ready))
+			return ready
 		}
 	}
-	return false
+
+	return ready
 }
 
-func getPodState(pod corev1.Pod) string {
-	message := "Pod: " + pod.Name
-	for _, containerStatus := range pod.Status.ContainerStatuses {
-		message = message + ", Container: " + containerStatus.Name + "State: " + containerStatus.State.String()
-	}
-	return message
-}
-
-func getPodsState(pods []corev1.Pod) string {
-	message := "Pods: "
-	for _, pod := range pods {
-		message += getPodState(pod)
-	}
-	return message
-}
-
-func (r *WordpressReconciler) ReconcilePods(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, podList *corev1.PodList) (breakControl bool, err error) {
+func (r *WordpressReconciler) reconcilePods(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, podList *corev1.PodList) (breakControl bool, err error) {
 	breakControl = false
 	err = nil
 
-	r.Log.Info(getPodsState(podList.Items))
-	for _, pod := range podList.Items {
-		if containsContainer(MySQLContainerName, pod) {
-			r.Log.Info("MySql Ready: " + strconv.FormatBool(isContainerReady(MySQLContainerName, pod)))
-		}
+	mysqlReady := false
+
+	// TODO Get container name and pod name from the wordpress status to feed into isContainerPodsReady
+	//mysqlReady := r.isContainerInPodsReady()
+
+	//Nothing to reconcile if mysql is still booting in the container
+	if !mysqlReady {
+		breakControl = true
+		return breakControl, err
 	}
+
+	// TODO Add wordpress to deployment here
+	//, r.defineWordpressContainer(wordpress)
 
 	//podNames := getPodNames(podList.Items)
 	//Development statement:  Printing all pod names
@@ -203,7 +242,7 @@ func (r *WordpressReconciler) getPodList(ctx context.Context, wordpress *wordpre
 	return breakControl, err
 }
 
-func (r *WordpressReconciler) ReconcileCustomResource(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, namespaceName types.NamespacedName) (breakControl bool, err error) {
+func (r *WordpressReconciler) reconcileCustomResource(ctx context.Context, namespaceName types.NamespacedName, wordpress *wordpressfullstackv1.Wordpress) (breakControl bool, err error) {
 	breakControl = false
 	err = nil
 
@@ -231,7 +270,7 @@ func (r *WordpressReconciler) ReconcileCustomResource(ctx context.Context, wordp
 	return breakControl, err
 }
 
-func (r *WordpressReconciler) ReconcileDeployment(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, deployment *appsv1.Deployment) (breakControl bool, err error) {
+func (r *WordpressReconciler) reconcileDeployment(ctx context.Context, wordpress *wordpressfullstackv1.Wordpress, deployment *appsv1.Deployment) (breakControl bool, err error) {
 	breakControl = false
 	err = nil
 
@@ -245,7 +284,7 @@ func (r *WordpressReconciler) ReconcileDeployment(ctx context.Context, wordpress
 			r.Log.Info("Creating a new Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
 
 			// Define a initial container in deployment.  We start with MySql
-			containers := []corev1.Container{r.defineMySqlContainer(wordpress), r.defineWordpressContainer(wordpress)}
+			containers := []corev1.Container{r.defineWordpressContainer(wordpress), r.defineMySqlContainer(wordpress)}
 
 			// Define the deployment
 			deployment := r.defineDeployment(wordpress, containers)
@@ -257,6 +296,29 @@ func (r *WordpressReconciler) ReconcileDeployment(ctx context.Context, wordpress
 			if err != nil {
 				breakControl = true
 				r.Log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
+				return breakControl, err
+			}
+
+			//TODO potentially assign Wordpress CR UID to Deployment as a label to allow searching for only this object
+			//Assign the wordpress deployment data to the status
+			wordpress.Status.WordpressDeploymentName = deployment.Name
+			wordpress.Status.WordpressDeploymentNamespace = deployment.Namespace
+			wordpress.Status.WordpressDeploymentUUID = string(deployment.UID)
+
+			//Assign the Wordpress pod data to the CR status
+			wordpress.Status.WordpressPodName = deployment.Spec.Template.Name
+			wordpress.Status.WordpressPodNamespace = deployment.Spec.Template.Namespace
+			wordpress.Status.WordpressPodUID = string(deployment.Spec.Template.UID)
+
+			//Assign the mysql container name to the cr status
+			//Note: We can index zero here only because we created the array and we know there is only 1 container
+			wordpress.Status.WordpressContainerName = deployment.Spec.Template.Spec.Containers[0].Name
+
+			//Must update wordpress cr to include added status values
+			err := r.Status().Update(ctx, wordpress)
+			if err != nil {
+				breakControl = true
+				r.Log.Error(err, "Failed to update Wordpress status")
 				return breakControl, err
 			}
 
@@ -298,6 +360,30 @@ func (r *WordpressReconciler) defineDeployment(w *wordpressfullstackv1.Wordpress
 					Labels: ls,
 				},
 				Spec: corev1.PodSpec{
+					Volumes: []corev1.Volume{{
+						Name: MySQL_MYSQLCNF_ConfigVolume,
+						VolumeSource: corev1.VolumeSource{
+							ConfigMap: &corev1.ConfigMapVolumeSource{
+								LocalObjectReference: corev1.LocalObjectReference{Name: MySQL_MYSQLCNF_ConfigMapKey},
+								Items: []corev1.KeyToPath{{
+									Key:  MySQL_MYSQLCNF_ConfigFile,
+									Path: MySQL_MYSQLCNF_ConfigFile,
+								}},
+							},
+						},
+					},
+						{
+							Name: MySQL_SECURECHK_ConfigVolume,
+							VolumeSource: corev1.VolumeSource{
+								ConfigMap: &corev1.ConfigMapVolumeSource{
+									LocalObjectReference: corev1.LocalObjectReference{Name: MySQL_SECURECHK_ConfigMapKey},
+									Items: []corev1.KeyToPath{{
+										Key:  MySQL_SECURECHK_ConfigFile,
+										Path: MySQL_SECURECHK_ConfigFile,
+									}},
+								},
+							},
+						}},
 					Containers: containers,
 				},
 			},
@@ -314,13 +400,18 @@ func updateDeploymentDefinition(deployment *appsv1.Deployment, container corev1.
 }
 
 func (r *WordpressReconciler) defineWordpressContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
+
 	wordpressContainer := corev1.Container{
 		Name:  WordpressContainerName,
 		Image: WordpressImageName,
+		Ports: []corev1.ContainerPort{{
+			Name:          "wordpress",
+			ContainerPort: 80,
+		}},
 		Env: []corev1.EnvVar{
 			{
 				Name:  "WORDPRESS_DB_HOST",
-				Value: "127.0.0.1:3306",
+				Value: ServiceName + ":" + MySQLPort,
 			},
 			{
 				Name:  "WORDPRESS_DB_USER",
@@ -328,7 +419,7 @@ func (r *WordpressReconciler) defineWordpressContainer(m *wordpressfullstackv1.W
 			},
 			{
 				Name:  "WORDPRESS_DB_PASSWORD",
-				Value: "Password1234",
+				Value: m.Spec.Password,
 			},
 			{
 				Name:  "WORDPRESS_DB_NAME",
@@ -344,24 +435,6 @@ func (r *WordpressReconciler) defineWordpressContainer(m *wordpressfullstackv1.W
 }
 
 func (r *WordpressReconciler) defineMySqlContainer(m *wordpressfullstackv1.Wordpress) corev1.Container {
-
-	//readinessProbe:
-	//exec:
-	//command:
-	//	{{- if .Values.mysqlAllowEmptyPassword }}
-	//	- mysqladmin
-	//	- ping
-	//	{{- else }}
-	//	- sh
-	//	- -c
-	//	- "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"
-	//	{{- end }}
-	//initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
-	//periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
-	//timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
-	//successThreshold: {{ .Values.readinessProbe.successThreshold }}
-	//failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
-	//}
 
 	probeAction := &corev1.ExecAction{
 		Command: []string{"sh", "-c", "mysqladmin ping -u root -p${MYSQL_ROOT_PASSWORD}"},
@@ -382,15 +455,21 @@ func (r *WordpressReconciler) defineMySqlContainer(m *wordpressfullstackv1.Wordp
 		Image: MySQLImageName,
 		Ports: []corev1.ContainerPort{{
 			Name:          "mysql",
-			ContainerPort: 3306,
-			Protocol:      "TCP",
-			HostIP:        "127.0.0.1",
-			HostPort:      3306,
+			ContainerPort: MySQLPort_INT32,
 		}},
 		Env: []corev1.EnvVar{{
 			Name:  "MYSQL_ROOT_PASSWORD",
-			Value: "Password1234",
+			Value: m.Spec.Password,
 		}},
+		VolumeMounts: []corev1.VolumeMount{{
+			Name:      MySQL_MYSQLCNF_ConfigVolume,
+			MountPath: MySQL_MYSQLCNF_ConfigPath,
+		},
+			{
+				Name:      MySQL_SECURECHK_ConfigVolume,
+				MountPath: MySQL_SECURECHK_ConfigPath,
+			},
+		},
 		ReadinessProbe: readinessProbe,
 	}
 

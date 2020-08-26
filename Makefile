@@ -162,3 +162,68 @@ myclean: mystop
 
 	#@docker system prune -af
 	@echo "Clean Done"
+
+
+.PHONY: create
+create: createConfigmap createDeployment createService createIngress
+	@echo "Creation Completed"
+
+.PHONY: delete
+create: deleteConfigmap deleteDeployment deleteService deleteIngress
+	@echo "Deletion Completed"
+
+.PHONY: createConfigmap
+createConfigmap:
+	-kubectl create configmap mysqlconfig --from-file ./ignoredir/mysql.cnf
+	-kubectl create configmap mysqlsecurecheck --from-file ./ignoredir/blank.cnf
+
+.PHONY: createDeployment
+createDeployment:
+	-kubectl apply -f ./config/samples/wordpress-fullstack_v1_wordpress.yaml
+
+.PHONY: createService
+createService:
+	-kubectl apply -f ./ignoredir/wordpress_service.yaml
+
+.PHONY: createIngress
+createIngress:
+	-kubectl apply -f ./ignoredir/ingress.yaml
+
+
+
+.PHONY: deleteConfigmap
+deleteConfigmap:
+	-kubectl delete configmaps mysqlconfig
+	-kubectl delete configmaps mysqlsecurecheck
+
+.PHONY: deleteDeployment
+deleteDeployment:
+	-kubectl delete --ignore-not-found=true -f ./config/samples/wordpress-fullstack_v1_wordpress.yaml
+
+.PHONY: deleteService
+deleteService:
+	-kubectl delete --ignore-not-found=true -f ./ignoredir/wordpress_service.yaml
+
+.PHONY: deleteIngress
+deleteIngress:
+	-kubectl apply -f ./ignoredir/ingress.yaml
+
+
+.PHONY: describeConfigmap
+describeConfigmap:
+	-kubectl describe configmaps mysqlconfig
+	-kubectl describe configmaps mysqlsecurecheck
+
+.PHONY: describeIngress
+describeIngress:
+	-kubectl describe ingress wordpress-ingress
+
+
+
+.PHONY: shellmysql
+shellmysql:
+	kubectl exec --stdin --tty $$(kubectl get pods | grep wordpress | awk '{print $$1}') -c mysql -- /bin/bash
+
+.PHONY: shellwordpress
+shellwordpress:
+	kubectl exec --stdin --tty $$(kubectl get pods | grep wordpress | awk '{print $$1}') -c wordpress -- /bin/bash

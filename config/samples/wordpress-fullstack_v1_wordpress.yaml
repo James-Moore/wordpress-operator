@@ -4,4 +4,4 @@ metadata:
   name: wordpress-moorej10
 spec:
   # Add fields here
-  password: password_val
+  password: p
