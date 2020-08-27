@@ -12,7 +12,7 @@ endif
 BUNDLE_METADATA_OPTS ?= $(BUNDLE_CHANNELS) $(BUNDLE_DEFAULT_CHANNEL)
 
 # Image URL to use all building/pushing image targets
-IMG ?= jamesjmoore/memcached-operator:1.0
+IMG ?= jamesjmoore/wordpress-operator:1.0
 # Produce CRDs that work back to Kubernetes 1.11 (no version conversion)
 CRD_OPTIONS ?= "crd:trivialVersions=true"
 
@@ -139,23 +139,23 @@ mybuild: mydev docker-build docker-push
 
 .PHONY: mystart
 mystart: deploy
-	kubectl apply -f ./config/samples/cache_v1_memcached.yaml
+	kubectl apply -f ./config/samples/cache_v1_wordpress.yaml
 	@echo "Start Done"
-	#kubectl logs memcached-operator-controller-manager-7c8ddcb78c-9vfpq manager
+	#kubectl logs wordpress-operator-controller-manager-7c8ddcb78c-9vfpq manager
 
 .PHONY: mystop
 mystop:
-	@kubectl delete --ignore-not-found=true -f config/samples/cache_v1_memcached.yaml 2> /dev/null | true
+	@kubectl delete --ignore-not-found=true -f config/samples/cache_v1_wordpress.yaml 2> /dev/null | true
 	@kustomize build config/default | kubectl delete --ignore-not-found -f -
 
 .PHONY: myclean
 myclean: mystop
-	@dockerlist=$$(docker images -a | grep -E 'none|memcached' | awk '{print $$3}'); \
+	@dockerlist=$$(docker images -a | grep -E 'none|wordpress' | awk '{print $$3}'); \
 	for i in $${dockerlist} ; do  \
 		docker rmi -f $${i} ; \
 	done
 
-	@ctrlist=$$(microk8s.ctr images list | grep memcached | awk '{print $$1}'); \
+	@ctrlist=$$(microk8s.ctr images list | grep wordpress | awk '{print $$1}'); \
 	for i in $${ctrlist} ; do  \
 		microk8s.ctr images rm $${i} ; \
 	done
@@ -174,7 +174,7 @@ create:  createDeployment createService createIngress
 	@echo "Creation Completed"
 
 .PHONY: delete
-delete:  deleteDeployment deleteService deleteIngress
+delete: deleteConfigmap deleteDeployment deleteService deleteIngress
 	@echo "Deletion Completed"
 
 .PHONY: createConfigmap
