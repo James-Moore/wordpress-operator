@@ -49,9 +49,11 @@ spec:
         status:
           description: WordpressStatus defines the observed state of Wordpress
           properties:
-            my_sql_container_name:
+            my_sql_config_map_configuration:
               type: string
-            my_sql_volume_uuid:
+            my_sql_configmap_secure:
+              type: string
+            my_sql_container_name:
               type: string
             wordpress_container_name:
               type: string
@@ -60,29 +62,18 @@ spec:
             wordpress_deployment_namespace:
               type: string
             wordpress_deployment_uuid:
-              type: string
-            wordpress_pod_name:
-              type: string
-            wordpress_pod_namespace:
-              type: string
-            wordpress_pod_uid:
-              type: string
-            wordpress_service_uuid:
               description: 'INSERT ADDITIONAL STATUS FIELD - define observed state
                 of cluster Important: Run "make" to regenerate code after modifying
                 this file'
               type: string
           required:
+          - my_sql_config_map_configuration
+          - my_sql_configmap_secure
           - my_sql_container_name
-          - my_sql_volume_uuid
           - wordpress_container_name
           - wordpress_deployment_name
           - wordpress_deployment_namespace
           - wordpress_deployment_uuid
-          - wordpress_pod_name
-          - wordpress_pod_namespace
-          - wordpress_pod_uid
-          - wordpress_service_uuid
           type: object
       type: object
   version: v1

@@ -12,7 +12,7 @@ const (
 	MYSQL_MYSQLCNF_CONFIGMAP_KEY    = "mysqlconfig"
 	MySQL_MYSQLCNF_CONFIGMAP_VOLUME = "mysqlconfigvolume"
 	MYSQL_MYSQLCNF_CONFIGMAP_PATH   = "/etc/mysql"
-	MYSQL_MYSQLCNF_CONFIG_FILE      = "mysql.cnf"
+	MYSQL_MYSQLCNF_CONFIGMAP_FILE   = "mysql.cnf"
 
 	MYSQL_SECURECHK_CONFIGMAP_KEY    = "mysqlsecurecheck"
 	MYSQL_SECURECHK_CONFIGMAP_VOLUME = "mysqlsecurecheckvolume"

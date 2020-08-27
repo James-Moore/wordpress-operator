@@ -47,9 +47,10 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 
 	r.Common.Log.Info("CHECKPOINT 3")
 	podManager := &pod.PodManager{Common: r.Common}
-	breakControl, err = podManager.Reconcile()
+	result := ctrl.Result{}
+	result, breakControl, err = podManager.Reconcile()
 	if breakControl {
-		return ctrl.Result{}, err
+		return result, err
 	}
 
 	// Update status.Nodes if needed
@@ -63,6 +64,7 @@ func (r *WordpressReconciler) Reconcile(req ctrl.Request) (ctrl.Result, error) {
 	//}
 
 	r.Common.Log.Info("CHECKPOINT 4")
+	r.Common.Log.Info("OPERATOR COMPLETED")
 	return ctrl.Result{}, nil
 }
 

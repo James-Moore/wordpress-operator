@@ -170,11 +170,11 @@ myclean: mystop
 
 
 .PHONY: create
-create: createConfigmap createDeployment createService createIngress
+create:  createDeployment createService createIngress
 	@echo "Creation Completed"
 
 .PHONY: delete
-delete: deleteConfigmap deleteDeployment deleteService deleteIngress
+delete:  deleteDeployment deleteService deleteIngress
 	@echo "Deletion Completed"
 
 .PHONY: createConfigmap
