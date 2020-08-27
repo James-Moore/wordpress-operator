@@ -4,7 +4,9 @@ import (
 	"github.com/James-Moore/wordpress-operator/controllers/common"
 	corev1 "k8s.io/api/core/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strconv"
+	"time"
 )
 
 type PodManager struct {
@@ -47,12 +49,14 @@ func (manager *PodManager) isContainerInPodReady(containerName string, pod corev
 }
 
 //MYSQL_CONTAINER_NAME
-func (manager *PodManager) isContainerInPodsReady(containerName string, podName string, pods []corev1.Pod) bool {
+func (manager *PodManager) isContainerInPodsReady(containerName string, pods []corev1.Pod) bool {
 	ready := false
 
 	manager.Common.Log.Info(manager.getPodsState(pods))
+	manager.Common.Log.Info("Looking for ContainerNamed " + containerName)
 	for _, pod := range pods {
-		if (podName == pod.Name) && (manager.containsContainer(containerName, pod)) {
+		if manager.containsContainer(containerName, pod) {
+			manager.Common.Log.Info("ContainerName match found..")
 			ready = manager.isContainerInPodReady(containerName, pod)
 			manager.Common.Log.Info("MySql Ready: " + strconv.FormatBool(ready))
 			return ready
@@ -62,7 +66,8 @@ func (manager *PodManager) isContainerInPodsReady(containerName string, podName 
 	return ready
 }
 
-func (manager *PodManager) Reconcile() (breakControl bool, err error) {
+func (manager *PodManager) Reconcile() (result reconcile.Result, breakControl bool, err error) {
+	result = reconcile.Result{}
 	breakControl = false
 	err = nil
 
@@ -71,57 +76,25 @@ func (manager *PodManager) Reconcile() (breakControl bool, err error) {
 	if err != nil {
 		manager.Common.Log.Error(err, "Could not retrieve pods from deployment while Reconciling.")
 		breakControl = true
-		return breakControl, err
+		return result, breakControl, err
 	}
 
 	// TODO Get container name and pod name from the wordpress status to feed into isContainerPodsReady
-	podName := manager.Common.Wordpress.Status.WordpressPodName
 	mysqlContainerName := manager.Common.Wordpress.Status.MySqlContainerName
-	mysqlReady := manager.isContainerInPodsReady(podName, mysqlContainerName, podList.Items)
+	mysqlReady := manager.isContainerInPodsReady(mysqlContainerName, podList.Items)
 
 	//Nothing to reconcile if mysql is still booting in the container
 	if !mysqlReady {
+		result = reconcile.Result{RequeueAfter: time.Duration(10) * time.Second}
 		manager.Common.Log.Info("MySQL is ready: " + strconv.FormatBool(mysqlReady))
 		breakControl = true
-		return breakControl, err
+		return result, breakControl, err
 	}
 
 	manager.Common.Log.Info("MySQL is ready: " + strconv.FormatBool(mysqlReady))
 
-	// TODO Add wordpress to deployment here
-	//, r.defineWordpressContainer(wordpress)
-
-	//podNames := getPodNames(podList.Items)
-	//Development statement:  Printing all pod names
-	//r.Log.Info("PRINTING POD NAMES: ")
-	//for podName, _ := range podNames {
-	//	r.Log.Info(podName)
-	//}
-
-	//switch os := len(podNames); os {
-	//case 0:
-	//	err := errors2.New("wordpress pod reconciliation error")
-	//	r.Log.Error(err, "WordpressContainer and MySQLContainer do not exist in deployment.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
-	//	return err
-	//case 1:
-	//	if _, ok := podNames[WORDPRESS_IMAGE_NAME]; !ok {
-	//		err := errors2.New("wordpress pod reconciliation error")
-	//		r.Log.Error(err, "WordpressContainer exists without MySQLContainer.  This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
-	//		return err
-	//	}
-	//	// TODO Update Deployment Definition here to include the wordpress container in the Pod.
-	//	// This becasue the mysqlpod is up and running
-	//default:
-	//	if os > 2 {
-	//		err := errors2.New("wordpress pod reconciliation error")
-	//		num := strconv.Itoa(os)
-	//		r.Log.Error(err, "There are additional pods that shoudl not exist in the Wordpress Deployment.  Number of pods are: "+num+".This should never happen.", "Wordpress.Namespace", wordpress.Namespace, "Wordpress.Name", wordpress.Name)
-	//		return err
-	//	}
-	//}
-
 	//Everything went fine.
-	return false, nil
+	return result, false, nil
 }
 
 // getPodNames returns the pod names of the array of pods passed in

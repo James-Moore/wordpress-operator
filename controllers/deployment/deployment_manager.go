@@ -3,6 +3,7 @@ package deployment
 import (
 	wordpressfullstackv1 "github.com/James-Moore/wordpress-operator/api/v1"
 	"github.com/James-Moore/wordpress-operator/controllers/common"
+	"github.com/James-Moore/wordpress-operator/controllers/configmap"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -37,8 +38,8 @@ func (manager *DeploymentManager) populateDeployment(containers []corev1.Contain
 							ConfigMap: &corev1.ConfigMapVolumeSource{
 								LocalObjectReference: corev1.LocalObjectReference{Name: common.MYSQL_MYSQLCNF_CONFIGMAP_KEY},
 								Items: []corev1.KeyToPath{{
-									Key:  common.MYSQL_MYSQLCNF_CONFIG_FILE,
-									Path: common.MYSQL_MYSQLCNF_CONFIG_FILE,
+									Key:  common.MYSQL_MYSQLCNF_CONFIGMAP_FILE,
+									Path: common.MYSQL_MYSQLCNF_CONFIGMAP_FILE,
 								}},
 							},
 						},
@@ -64,21 +65,21 @@ func (manager *DeploymentManager) populateDeployment(containers []corev1.Contain
 }
 
 func (manager *DeploymentManager) updateStatus(deployment *appsv1.Deployment, wordpressContainer *corev1.Container, mysqlContainer *corev1.Container) {
-	//TODO potentially assign Wordpress CR UID to Deployment as a label to allow searching for only this object
 	//Assign the Wordpress Deployment data to the status
+
+	manager.C.Log.Info("Updating Deployment Status")
 	manager.C.Wordpress.Status.WordpressDeploymentName = deployment.Name
 	manager.C.Wordpress.Status.WordpressDeploymentNamespace = deployment.Namespace
 	manager.C.Wordpress.Status.WordpressDeploymentUUID = string(deployment.UID)
-
-	//Assign the Wordpress pod data to the CR status
-	manager.C.Wordpress.Status.WordpressPodName = deployment.Spec.Template.Name
-	manager.C.Wordpress.Status.WordpressPodNamespace = deployment.Spec.Template.Namespace
-	manager.C.Wordpress.Status.WordpressPodUID = string(deployment.Spec.Template.UID)
+	manager.C.Log.Info("Wordpress Deployment Added To Wordpress CR Status")
 
 	//Assign the mysql container name to the cr status
 	//Note: We can index zero here only because we created the array and we know there is only 1 container
+	manager.C.Log.Info("Updating Containers Status")
 	manager.C.Wordpress.Status.WordpressContainerName = wordpressContainer.Name
+	manager.C.Log.Info("Wordpress Container Added To Wordpress CR Status")
 	manager.C.Wordpress.Status.MySqlContainerName = mysqlContainer.Name
+	manager.C.Log.Info("Wordpress Container Added To Wordpress CR Status")
 }
 
 func (manager *DeploymentManager) Reconcile() (bool, error) {
@@ -92,7 +93,12 @@ func (manager *DeploymentManager) Reconcile() (bool, error) {
 		//If the Deployment is not found create the Deployment and disregard the error.  This is expected behavior.
 		if errors.IsNotFound(err) {
 
-			// DEBUG
+			ctrl.Log.Info("Generating Configmaps for Deployment")
+			cfgMan := configmap.ConfigMapManager{
+				C: manager.C,
+			}
+			breakControl, err = cfgMan.Reconcile()
+			ctrl.Log.Info("Configmap Generation Completed")
 
 			// Define containers to be deployed
 			wordpressContainer := manager.DefineWordpressContainer(manager.C.Wordpress)
@@ -113,6 +119,7 @@ func (manager *DeploymentManager) Reconcile() (bool, error) {
 				manager.C.Log.Error(err, "Failed to create new Deployment", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
 				return breakControl, err
 			}
+			manager.C.Log.Info("Deployment Completed", "Deployment.Namespace", deployment.Namespace, "Deployment.Name", deployment.Name)
 
 			manager.updateStatus(deployment, &wordpressContainer, &mysqlContainer)
 
