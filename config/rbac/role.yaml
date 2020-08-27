@@ -19,7 +19,14 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.example.com
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - wordpress-fullstack.jamesmoore.in
   resources:
   - wordpresss
   verbs:
@@ -31,17 +38,10 @@ rules:
   - update
   - watch
 - apiGroups:
-  - cache.example.com
+  - wordpress-fullstack.jamesmoore.in
   resources:
   - wordpresss/status
   verbs:
   - get
   - patch
   - update
-- apiGroups:
-  - ""
-  resources:
-  - pods
-  verbs:
-  - get
-  - list

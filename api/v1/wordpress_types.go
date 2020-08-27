@@ -29,6 +29,7 @@ type WordpressSpec struct {
 	// Important: Run "make" to regenerate code after modifying this file
 
 	// Foo is an example field of Wordpress. Edit Wordpress_types.go to remove/update
+	AppName  string `json:"AppName"`
 	Password string `json:"password"`
 }
 

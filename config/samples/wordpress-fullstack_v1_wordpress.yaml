@@ -4,4 +4,5 @@ metadata:
   name: wordpress-moorej10
 spec:
   # Add fields here
+  AppName: James-Test
   password: p

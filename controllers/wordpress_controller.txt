@@ -417,8 +417,8 @@ func (r *WordpressReconciler) SetupWithManager(mgr ctrl.Manager) error {
 
 }
 
-// +kubebuilder:rbac:groups=cache.example.com,resources=wordpresss,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=cache.example.com,resources=wordpresss/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=wordpress-fullstack.jamesmoore.in,resources=wordpresss,verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups=wordpress-fullstack.jamesmoore.in,resources=wordpresss/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 
