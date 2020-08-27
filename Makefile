@@ -211,7 +211,7 @@ deleteService:
 
 .PHONY: deleteIngress
 deleteIngress:
-	-kubectl apply -f ./config/samples/ingress/wordpress_ingress.yaml
+	-kubectl delete --ignore-not-found=true -f ./config/samples/ingress/wordpress_ingress.yaml
 
 
 .PHONY: describeConfigmap

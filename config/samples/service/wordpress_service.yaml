@@ -4,8 +4,9 @@ metadata:
   name: wpservice
 spec:
   selector:
+    Wordpress: wordpress-moorej10
     app: wordpress_on_sql
-    wordpress_cr: wordpress-moorej10
+    tier: fullstack
   ports:
     - name: wordpress
       protocol: TCP
