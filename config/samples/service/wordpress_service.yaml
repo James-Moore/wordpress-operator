@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: wpservice
+spec:
+  selector:
+    app: wordpress_on_sql
+    wordpress_cr: wordpress-moorej10
+  ports:
+    - name: wordpress
+      protocol: TCP
+      port: 80
+      targetPort: wordpress
+    - name: mysql
+      protocol: TCP
+      port: 3306
+      targetPort: mysql
