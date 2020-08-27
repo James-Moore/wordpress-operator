@@ -164,18 +164,23 @@ myclean: mystop
 	@echo "Clean Done"
 
 
+
+
+
+
+
 .PHONY: create
 create: createConfigmap createDeployment createService createIngress
 	@echo "Creation Completed"
 
 .PHONY: delete
-create: deleteConfigmap deleteDeployment deleteService deleteIngress
+delete: deleteConfigmap deleteDeployment deleteService deleteIngress
 	@echo "Deletion Completed"
 
 .PHONY: createConfigmap
 createConfigmap:
-	-kubectl create configmap mysqlconfig --from-file ./ignoredir/mysql.cnf
-	-kubectl create configmap mysqlsecurecheck --from-file ./ignoredir/blank.cnf
+	-kubectl create configmap mysqlconfig --from-file ./config/samples/cnf/mysql.cnf
+	-kubectl create configmap mysqlsecurecheck --from-file ./config/samples/cnf/blank.cnf
 
 .PHONY: createDeployment
 createDeployment:
@@ -183,11 +188,11 @@ createDeployment:
 
 .PHONY: createService
 createService:
-	-kubectl apply -f ./ignoredir/wordpress_service.yaml
+	-kubectl apply -f ./config/samples/service/wordpress_service.yaml
 
 .PHONY: createIngress
 createIngress:
-	-kubectl apply -f ./ignoredir/ingress.yaml
+	-kubectl apply -f ./config/samples/ingress/wordpress_ingress.yaml
 
 
 
@@ -202,11 +207,11 @@ deleteDeployment:
 
 .PHONY: deleteService
 deleteService:
-	-kubectl delete --ignore-not-found=true -f ./ignoredir/wordpress_service.yaml
+	-kubectl delete --ignore-not-found=true -f ./config/samples/service/wordpress_service.yaml
 
 .PHONY: deleteIngress
 deleteIngress:
-	-kubectl apply -f ./ignoredir/ingress.yaml
+	-kubectl apply -f ./config/samples/ingress/wordpress_ingress.yaml
 
 
 .PHONY: describeConfigmap

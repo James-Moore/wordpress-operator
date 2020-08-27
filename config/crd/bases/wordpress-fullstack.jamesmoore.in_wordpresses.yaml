@@ -36,11 +36,14 @@ spec:
         spec:
           description: WordpressSpec defines the desired state of Wordpress
           properties:
-            password:
+            AppName:
               description: Foo is an example field of Wordpress. Edit Wordpress_types.go
                 to remove/update
               type: string
+            password:
+              type: string
           required:
+          - AppName
           - password
           type: object
         status:
