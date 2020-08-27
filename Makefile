@@ -138,14 +138,12 @@ mybuild: mydev docker-build docker-push
 	@echo "Build Done"
 
 .PHONY: mystart
-mystart: deploy
-	kubectl apply -f ./config/samples/cache_v1_wordpress.yaml
+mystart: deploy create
 	@echo "Start Done"
 	#kubectl logs wordpress-operator-controller-manager-7c8ddcb78c-9vfpq manager
 
 .PHONY: mystop
-mystop:
-	@kubectl delete --ignore-not-found=true -f config/samples/cache_v1_wordpress.yaml 2> /dev/null | true
+mystop: delete
 	@kustomize build config/default | kubectl delete --ignore-not-found -f -
 
 .PHONY: myclean
@@ -198,8 +196,7 @@ createIngress:
 
 .PHONY: deleteConfigmap
 deleteConfigmap:
-	-kubectl delete configmaps mysqlconfig
-	-kubectl delete configmaps mysqlsecurecheck
+	-kubectl delete configmaps --all
 
 .PHONY: deleteDeployment
 deleteDeployment:
